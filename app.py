@@ -13,6 +13,46 @@ with st.sidebar:
     st.header("Settings")
     show_sources = st.checkbox("Show sources", value=True)
     
+    # File Upload
+    st.header("📁 Upload Files")
+    uploaded_files = st.file_uploader(
+        "Upload PDF or Images",
+        type=["pdf", "png", "jpg", "jpeg"],
+        accept_multiple_files=True,
+    )
+    
+    if uploaded_files:
+        for uploaded_file in uploaded_files:
+            try:
+                files = {"file": (uploaded_file.name, uploaded_file.getvalue())}
+                r = requests.post(f"{API_URL}/upload", files=files)
+                if r.ok:
+                    st.success(f"✓ {uploaded_file.name}")
+                else:
+                    st.error(f"✗ {uploaded_file.name}: {r.text}")
+            except:
+                st.error(f"✗ {uploaded_file.name}: API error")
+    
+    # Show existing files
+    st.header("📂 Files")
+    try:
+        r = requests.get(f"{API_URL}/files")
+        if r.ok:
+            files = r.json().get("files", [])
+            if files:
+                for f in files:
+                    col1, col2 = st.columns([3, 1])
+                    col1.write(f"📄 {f}")
+                    if col2.button("🗑️", key=f"del_{f}"):
+                        requests.delete(f"{API_URL}/files/{f}")
+                        st.rerun()
+            else:
+                st.caption("No files yet")
+    except:
+        st.caption("API not running")
+    
+    st.divider()
+    
     if st.button("🔄 Rebuild Index"):
         with st.spinner("Reindexing..."):
             try:

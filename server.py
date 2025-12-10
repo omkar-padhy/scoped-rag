@@ -1,8 +1,14 @@
 """FastAPI backend for RAG system"""
-from fastapi import FastAPI, HTTPException
+import os
+import shutil
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from pydantic import BaseModel
 
 from text import process_pdfs
+
+DATA_PATH = Path("data")
 from image import process_images
 from vector_store import (
     create_vector_store,
@@ -96,6 +102,57 @@ def reindex():
         store = create_vector_store(all_chunks)
         save_vector_store(store)
         return {"status": "reindexed", "chunks": len(all_chunks)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/upload")
+async def upload_file(file: UploadFile = File(...)):
+    """Upload a file to the data folder"""
+    try:
+        # Validate file type
+        allowed_ext = {".pdf", ".png", ".jpg", ".jpeg"}
+        ext = Path(file.filename).suffix.lower()
+        if ext not in allowed_ext:
+            raise HTTPException(400, f"File type {ext} not allowed. Use: {allowed_ext}")
+        
+        # Save file
+        DATA_PATH.mkdir(exist_ok=True)
+        file_path = DATA_PATH / file.filename
+        
+        with open(file_path, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+        
+        return {"status": "uploaded", "filename": file.filename}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/files")
+def list_files():
+    """List files in data folder"""
+    try:
+        if not DATA_PATH.exists():
+            return {"files": []}
+        files = [f.name for f in DATA_PATH.iterdir() if f.is_file()]
+        return {"files": files}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/files/{filename}")
+def delete_file(filename: str):
+    """Delete a file from data folder"""
+    try:
+        file_path = DATA_PATH / filename
+        if not file_path.exists():
+            raise HTTPException(404, "File not found")
+        file_path.unlink()
+        return {"status": "deleted", "filename": filename}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
