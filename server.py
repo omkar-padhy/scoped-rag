@@ -7,6 +7,7 @@ from fastapi import FastAPI, HTTPException, UploadFile, File
 from pydantic import BaseModel
 
 from text import process_pdfs
+from audio import process_audio
 
 DATA_PATH = Path("data")
 from image import process_images
@@ -48,7 +49,8 @@ def get_store():
             print("Creating new index...")
             pdf_chunks = process_pdfs()
             image_chunks = process_images()
-            all_chunks = pdf_chunks + image_chunks
+            audio_chunks = process_audio()
+            all_chunks = pdf_chunks + image_chunks + audio_chunks
             store = create_vector_store(all_chunks)
             save_vector_store(store)
     return store
@@ -98,7 +100,8 @@ def reindex():
     try:
         pdf_chunks = process_pdfs()
         image_chunks = process_images()
-        all_chunks = pdf_chunks + image_chunks
+        audio_chunks = process_audio()
+        all_chunks = pdf_chunks + image_chunks + audio_chunks
         store = create_vector_store(all_chunks)
         save_vector_store(store)
         return {"status": "reindexed", "chunks": len(all_chunks)}
@@ -111,7 +114,7 @@ async def upload_file(file: UploadFile = File(...)):
     """Upload a file to the data folder"""
     try:
         # Validate file type
-        allowed_ext = {".pdf", ".png", ".jpg", ".jpeg"}
+        allowed_ext = {".pdf", ".png", ".jpg", ".jpeg", ".mp3", ".wav", ".flac", ".m4a", ".ogg", ".mpeg", ".mp4"}
         ext = Path(file.filename).suffix.lower()
         if ext not in allowed_ext:
             raise HTTPException(400, f"File type {ext} not allowed. Use: {allowed_ext}")

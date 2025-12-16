@@ -1,5 +1,6 @@
 import sys
 
+from audio import process_audio
 from image import process_images
 from text import process_pdfs
 from vector_store import (
@@ -24,9 +25,12 @@ except:
     # Process Images (PNG, JPEG, JPG)
     image_chunks = process_images()
     
+    # Process Audio (MP3, WAV, etc.)
+    audio_chunks = process_audio()
+    
     # Combine all chunks
-    all_chunks = pdf_chunks + image_chunks
-    print(f"Total chunks: {len(all_chunks)} (PDFs: {len(pdf_chunks)}, Images: {len(image_chunks)})")
+    all_chunks = pdf_chunks + image_chunks + audio_chunks
+    print(f"Total chunks: {len(all_chunks)} (PDFs: {len(pdf_chunks)}, Images: {len(image_chunks)}, Audio: {len(audio_chunks)})")
     
     store = create_vector_store(all_chunks)
     save_vector_store(store)
