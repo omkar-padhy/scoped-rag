@@ -1,13 +1,13 @@
 """FastAPI backend for RAG system"""
-import os
+
 import shutil
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
-from text import process_pdfs
 from audio import process_audio
+from text import process_pdfs
 
 DATA_PATH = Path("data")
 from image import process_images
@@ -114,18 +114,30 @@ async def upload_file(file: UploadFile = File(...)):
     """Upload a file to the data folder"""
     try:
         # Validate file type
-        allowed_ext = {".pdf", ".png", ".jpg", ".jpeg", ".mp3", ".wav", ".flac", ".m4a", ".ogg", ".mpeg", ".mp4"}
+        allowed_ext = {
+            ".pdf",
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".mp3",
+            ".wav",
+            ".flac",
+            ".m4a",
+            ".ogg",
+            ".mpeg",
+            ".mp4",
+        }
         ext = Path(file.filename).suffix.lower()
         if ext not in allowed_ext:
             raise HTTPException(400, f"File type {ext} not allowed. Use: {allowed_ext}")
-        
+
         # Save file
         DATA_PATH.mkdir(exist_ok=True)
         file_path = DATA_PATH / file.filename
-        
+
         with open(file_path, "wb") as f:
             shutil.copyfileobj(file.file, f)
-        
+
         return {"status": "uploaded", "filename": file.filename}
     except HTTPException:
         raise
@@ -162,4 +174,5 @@ def delete_file(filename: str):
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)

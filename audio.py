@@ -5,13 +5,15 @@ Optimized for RTX 3050 4GB VRAM + 8GB RAM
 
 import os
 import subprocess
-import numpy as np
 from pathlib import Path
+
+import numpy as np
 
 # Set ffmpeg path from imageio-ffmpeg BEFORE importing transformers
 FFMPEG_PATH = None
 try:
     import imageio_ffmpeg
+
     FFMPEG_PATH = imageio_ffmpeg.get_ffmpeg_exe()
     os.environ["PATH"] = os.path.dirname(FFMPEG_PATH) + os.pathsep + os.environ["PATH"]
     os.environ["FFMPEG_BINARY"] = FFMPEG_PATH
@@ -21,9 +23,9 @@ except ImportError:
     FFMPEG_PATH = "ffmpeg"
 
 import torch
-from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
 
 # =====================
 # Configuration
@@ -33,8 +35,8 @@ DATA_PATH = "data"
 SUPPORTED_FORMATS = {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".mpeg", ".mp4"}
 
 MODEL_ID = "openai/whisper-small.en"
-CHUNK_LENGTH_S = 30   # prevents VRAM spikes
-BATCH_SIZE = 1        # safe for 4GB VRAM
+CHUNK_LENGTH_S = 30  # prevents VRAM spikes
+BATCH_SIZE = 1  # safe for 4GB VRAM
 
 # Global pipeline (lazy-loaded)
 _whisper_pipe = None
@@ -43,6 +45,7 @@ _whisper_pipe = None
 # =====================
 # Whisper Loader
 # =====================
+
 
 def get_whisper_pipeline():
     """Lazy-load Whisper Small EN pipeline"""
@@ -81,22 +84,28 @@ def get_whisper_pipeline():
 # Audio Loading (using ffmpeg directly)
 # =====================
 
+
 def load_audio_with_ffmpeg(audio_path: Path, sample_rate: int = 16000) -> np.ndarray:
     """Load audio file using ffmpeg and return numpy array"""
     cmd = [
         FFMPEG_PATH,
-        "-i", str(audio_path),
-        "-f", "f32le",
-        "-acodec", "pcm_f32le",
-        "-ac", "1",
-        "-ar", str(sample_rate),
-        "-"
+        "-i",
+        str(audio_path),
+        "-f",
+        "f32le",
+        "-acodec",
+        "pcm_f32le",
+        "-ac",
+        "1",
+        "-ar",
+        str(sample_rate),
+        "-",
     ]
-    
+
     result = subprocess.run(cmd, capture_output=True)
     if result.returncode != 0:
         raise RuntimeError(f"ffmpeg error: {result.stderr.decode()}")
-    
+
     audio = np.frombuffer(result.stdout, dtype=np.float32)
     return audio
 
@@ -104,6 +113,7 @@ def load_audio_with_ffmpeg(audio_path: Path, sample_rate: int = 16000) -> np.nda
 # =====================
 # Transcription
 # =====================
+
 
 def transcribe_audio(audio_path: Path) -> dict:
     """Transcribe one audio file"""
@@ -114,7 +124,7 @@ def transcribe_audio(audio_path: Path) -> dict:
     try:
         # Load audio using our ffmpeg wrapper
         audio_array = load_audio_with_ffmpeg(audio_path)
-        
+
         # Pass numpy array instead of file path
         # Note: whisper-small.en is English-only, no language/task needed
         result = pipe(
@@ -148,6 +158,7 @@ def transcribe_audio(audio_path: Path) -> dict:
 # Audio File Loader
 # =====================
 
+
 def load_audio_files(data_path: str = DATA_PATH) -> list[dict]:
     """Load and transcribe all supported audio files"""
     data_dir = Path(data_path)
@@ -158,7 +169,8 @@ def load_audio_files(data_path: str = DATA_PATH) -> list[dict]:
         return audio_data
 
     audio_files = [
-        f for f in data_dir.iterdir()
+        f
+        for f in data_dir.iterdir()
         if f.is_file() and f.suffix.lower() in SUPPORTED_FORMATS
     ]
 
@@ -176,6 +188,7 @@ def load_audio_files(data_path: str = DATA_PATH) -> list[dict]:
 # LangChain Documents
 # =====================
 
+
 def create_audio_documents(audio_data: list[dict]) -> list[Document]:
     """Convert transcriptions to LangChain Documents"""
     documents = []
@@ -184,14 +197,16 @@ def create_audio_documents(audio_data: list[dict]) -> list[Document]:
         if data["transcription"] == "ERROR_TRANSCRIBING_AUDIO":
             continue
 
-        content = "\n".join([
-            f"[Audio File: {data['file_name']}]",
-            f"[Format: {data['format']}]",
-            f"[Duration: {data['duration_info']}]",
-            "",
-            "=== Transcription ===",
-            data["transcription"]
-        ])
+        content = "\n".join(
+            [
+                f"[Audio File: {data['file_name']}]",
+                f"[Format: {data['format']}]",
+                f"[Duration: {data['duration_info']}]",
+                "",
+                "=== Transcription ===",
+                data["transcription"],
+            ]
+        )
 
         documents.append(
             Document(
@@ -200,8 +215,8 @@ def create_audio_documents(audio_data: list[dict]) -> list[Document]:
                     "source": data["file_name"],
                     "format": data["format"],
                     "type": "audio",
-                    "duration": data["duration_info"]
-                }
+                    "duration": data["duration_info"],
+                },
             )
         )
 
@@ -212,12 +227,13 @@ def create_audio_documents(audio_data: list[dict]) -> list[Document]:
 # Chunking for RAG
 # =====================
 
+
 def split_audio_documents(documents: list[Document]) -> list[Document]:
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=800,
         chunk_overlap=80,
         separators=["\n\n", "\n", ". ", " ", ""],
-        length_function=len
+        length_function=len,
     )
 
     chunks = splitter.split_documents(documents)
@@ -246,6 +262,7 @@ def add_audio_chunk_ids(chunks: list[Document]) -> list[Document]:
 # =====================
 # Full Pipeline
 # =====================
+
 
 def process_audio(data_path: str = DATA_PATH) -> list[Document]:
     audio_data = load_audio_files(data_path)
