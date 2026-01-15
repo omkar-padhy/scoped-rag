@@ -1,50 +1,56 @@
 # Scoped RAG
 
-A high-performance multimodal RAG (Retrieval-Augmented Generation) system with Docling OCR support for processing PDFs, Office documents (DOCX, PPTX, XLSX), images, and audio files.
+A high-performance, production-ready Multimodal RAG (Retrieval-Augmented Generation) system featuring **Hybrid Search**, **Reranking**, and an **LLM Cascade** architecture. Supports Docling OCR for complex documents, Vision analysis for images, and GPU-accelerated audio transcription.
 
-## Features
+## Key Capabilities
 
-- **🔍 Docling OCR Engine** - High-performance document processing with table extraction
-- **📄 PDF Processing** - OCR-enabled text extraction with table structure recognition
-- **📝 Office Documents** - Full support for DOCX, PPTX, XLSX files
-- **🖼️ Image Processing** - OCR + Vision captioning using Qwen3-VL via Ollama
-- **🎵 Audio Processing** - Speech-to-text using Whisper (HuggingFace)
-- **🔎 Vector Search** - FAISS HNSW for high-speed similarity search
-- **🌐 Web UI** - Streamlit frontend with chat interface
-- **⚡ REST API** - FastAPI backend with Docling support
+- **🧠 Smart Retrieval** - Hybrid search (BM25 + Vector), Query Expansion, and Cross-Encoder Reranking
+- **🔄 LLM Cascade** - Automatic fallback: Groq 70B (Quality) → 17B (Speed) → 8B (Reliability) → Local Ollama (Offline)
+- **🔍 Docling OCR** - High-fidelity PDF & Office document processing with table structure preservation
+- **🖼️ Vision Intelligence** - Dual-stage analysis using OpenRouter (Nemotron/Qwen) with local fallback
+- **🎵 Audio Transcription** - GPU-accelerated Speech-to-Text using Faster-Whisper
+- **🔒 Access Control** - Granular access levels (L1-L5) for document security
+- **⚡ Modern Stack** - ChromaDB, LangChain, Streamlit, and FastAPI
 
 ## Supported File Formats
 
-| Category | Formats |
-|----------|---------|
-| Documents | PDF, DOCX, DOC, PPTX, PPT, XLSX, XLS |
-| Images | PNG, JPG, JPEG, TIFF, TIF, BMP, WEBP |
-| Audio | MP3, WAV, FLAC, M4A, OGG, MPEG, MP4 |
+| Category | Formats | Processing Method |
+|----------|---------|-------------------|
+| Documents | PDF, DOCX, PPTX, XLSX | Docling OCR + Semantic Chunking |
+| Text | TXT, MD, CSV, JSON | Recursive Splitting |
+| Images | PNG, JPG, WEBP, BMP | Vision Model Captioning + OCR |
+| Audio | MP3, WAV, M4A, OGG | Faster-Whisper Transcription |
 
 ## Tech Stack
 
-| Component | Technology |
-|-----------|------------|
-| OCR Engine | Docling (with fallback support) |
-| Embeddings | Ollama (embeddinggemma) |
-| LLM | Ollama (llama3.2) |
-| Vision | Ollama (qwen3-vl) |
-| Speech-to-Text | Whisper Small EN (HuggingFace) |
-| Vector Store | FAISS HNSW |
-| Backend | FastAPI |
-| Frontend | Streamlit |
+| Component | Technology | Model / Config |
+|-----------|------------|----------------|
+| **LLM Engine** | Groq API + Ollama | Llama 3.3 70B → 17B → 8B → Llama 3.2 (Local) |
+| **Embeddings** | Ollama | `mxbai-embed-large:335m-v1-fp16` |
+| **Vector Store** | ChromaDB | Local persistent storage with MMR search |
+| **Search** | Hybrid | Vector (Semantic) + BM25 (Keyword) + Reranking |
+| **Vision** | OpenRouter/Ollama | Nemotron-12B / Qwen-2.5-VL / Qwen2-VL (Local) |
+| **Audio** | Faster-Whisper | `small.en` (GPU optimized) |
+| **Frontend** | Streamlit | Chat UI with Source & Context Viewer |
 
 ## Prerequisites
 
 - Python 3.11+
-- [uv](https://github.com/astral-sh/uv) (package manager)
-- [Ollama](https://ollama.ai/) running locally
+- [uv](https://github.com/astral-sh/uv) (recommended) or pip
+- [Ollama](https://ollama.ai/) running locally for embeddings/fallback
+
+### Environment Variables (.env)
+Create a `.env` file in the root directory:
+```env
+GROQ_API_KEY=gsk_...
+OPENROUTER_API_KEY=sk-or-...
+GOOGLE_API_KEY=... (Optional for Gemini)
+```
 
 ### Required Ollama Models
-
 ```bash
-ollama pull embeddinggemma:300m-bf16
-ollama pull llama3.2:3b-instruct-q8_0
+ollama pull mxbai-embed-large:335m-v1-fp16
+ollama pull llama3.2:3b-instruct-q4_K_M
 ollama pull qwen3-vl:2b-instruct-q4_K_M
 ```
 
@@ -55,90 +61,66 @@ ollama pull qwen3-vl:2b-instruct-q4_K_M
 git clone https://github.com/Omkar-888/scoped-rag.git
 cd scoped-rag
 
-# Install dependencies
+# Install dependencies with uv
 uv sync
 
-# Install Docling OCR (optional, falls back to basic extraction)
-pip install docling docling-core python-docx python-pptx openpyxl
+# OR with pip
+pip install -r requirements.txt
 ```
 
 ## Usage
 
-### Option 1: Web UI (Recommended)
+### 1. Start the Web UI (Recommended)
+This launches both the backend services and the Streamlit frontend.
 
-**Terminal 1 - Start Backend:**
-```bash
-uv run python server.py
-```
-
-**Terminal 2 - Start Frontend:**
 ```bash
 uv run streamlit run app.py
 ```
+Open **http://localhost:8501** in your browser.
 
-Open http://localhost:8501 in your browser.
+### 2. Interface Features
+- **Creating Index:** Upload files via the "📁 Data Management" sidebar tab.
+- **RAG Chat:** Ask questions in the main chat window.
+- **Debug View:** Check "🔍 Show retrieved context" to see exactly what chunks were sent to the LLM.
+- **Rebuild Index:** Use "🔄 Rebuild Index" if you add files manually to `data/`.
 
-### Option 2: CLI
+### 3. CLI Usage
 
 ```bash
-# Basic usage
-uv run python main.py "your question here"
+# Ask a question via CLI
+uv run python main.py "What is the summary of the financial report?"
 
-# Force rebuild index
+# Force rebuild the index
 uv run python main.py --rebuild "your question"
 
-# Use Docling OCR (recommended for Office docs)
-uv run python main.py --use-docling --rebuild "your question"
+# Run Quality/Smoke Tests
+uv run python test.py
 ```
 
-### Option 3: Test OCR Module
+## Retrieval Pipeline
 
-```bash
-uv run python test_ocr.py
-```
-
-## Adding Documents
-
-1. Place files in the `data/` folder:
-   - PDFs (`.pdf`)
-   - Office docs (`.docx`, `.pptx`, `.xlsx`)
-   - Images (`.png`, `.jpg`, `.jpeg`, `.tiff`, `.bmp`, `.webp`)
-   - Audio (`.mp3`, `.wav`, `.flac`, `.m4a`, `.ogg`, `.mpeg`)
-
-2. Rebuild the index:
-   - **Web UI**: Click "🔄 Rebuild Index" in sidebar
-   - **CLI**: `uv run python main.py --rebuild --use-docling "test"`
-   - **API**: `POST /reindex?use_docling=true`
-
-## API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check |
-| `/stats` | GET | File statistics |
-| `/supported-formats` | GET | List supported formats |
-| `/query` | POST | Query (answer only) |
-| `/query-with-sources` | POST | Query with sources |
-| `/reindex?use_docling=true` | POST | Rebuild vector index |
-| `/upload` | POST | Upload file to data folder |
-| `/files` | GET | List files in data folder |
-| `/files/{filename}` | DELETE | Delete a file |
+The system uses a sophisticated 4-step retrieval process:
+1. **Query Expansion:** Generates 3 source queries from your question.
+2. **Hybrid Search:**
+   - **Vector:** Semantic search using embeddings (MMR for diversity).
+   - **BM25:** Keyword-based search for exact matches.
+3. **Deduplication:** Merges results from all queries and search methods.
+4. **Reranking:** Cross-encoder scoring to select the best 6 chunks.
 
 ## Project Structure
 
 ```
 scoped-rag/
-├── app.py           # Streamlit frontend
-├── server.py        # FastAPI backend
-├── main.py          # CLI entry point
-├── model.py         # Ollama model config
-├── text.py          # PDF processing
-├── image.py         # Image OCR + description
-├── audio.py         # Audio transcription
-├── vector_store.py  # FAISS operations
-├── data/            # Source documents
-├── faiss_index/     # Vector index storage
-└── pyproject.toml   # Dependencies
+├── app.py           # Streamlit frontend & UI logic
+├── config.py        # Central configuration (Models, API Keys)
+├── llm.py           # Cascading LLM handler (Groq -> Local)
+├── vector_store.py  # ChromaDB, Hybrid Search, Reranking logic
+├── ocr.py           # Docling OCR & Chunking
+├── server.py        # FastAPI Access Point
+├── image.py         # Vision processing
+├── audio.py         # Whisper transcription
+├── data/            # Input documents directory
+└── chroma_db/       # Persistent vector database
 ```
 
 ## License
