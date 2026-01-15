@@ -1,13 +1,16 @@
 from langchain_ollama import OllamaEmbeddings, OllamaLLM
+from config import EMBEDDING_MODEL, VISION_MODEL
+
+# Import cascading LLM from new module
+from llm import get_llm, query_with_fallback
 
 
-def get_embedding():
-    return OllamaEmbeddings(model="embeddinggemma:300m-bf16")
+def get_embeddings():
+    return OllamaEmbeddings(model=EMBEDDING_MODEL)
 
 
-def get_llm():
-    return OllamaLLM(model="llama3.2:3b-instruct-q8_0")
+# get_llm is now imported from llm.py with cascading fallback
 
 
 def get_image_description():
-    return OllamaLLM(model="moondream-latest")
+    return OllamaLLM(model=VISION_MODEL)

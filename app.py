@@ -12,6 +12,16 @@ st.caption("Ask questions about your documents")
 with st.sidebar:
     st.header("Settings")
     show_sources = st.checkbox("Show sources", value=True)
+    show_context = st.checkbox("🔍 Show retrieved context (debug)", value=False)
+    
+    # Access Level
+    st.subheader("🔐 Access Control")
+    user_level = st.select_slider(
+        "User Security Level",
+        options=[1, 2, 3, 4, 5],
+        value=2,
+        help="L1: Public | L2: Internal | L3: Confidential | L4: Sensitive | L5: Top Secret"
+    )
     
     # File Upload
     st.header("📁 Upload Files")
@@ -53,12 +63,13 @@ with st.sidebar:
     
     st.divider()
     
-    if st.button("🔄 Rebuild Index"):
-        with st.spinner("Reindexing..."):
+    if st.button("🔄 Sync Index"):
+        with st.spinner("Syncing..."):
             try:
-                r = requests.post(f"{API_URL}/reindex")
+                r = requests.post(f"{API_URL}/reindex") # Endpoint name stays same for compatibility
                 if r.ok:
-                    st.success(f"Done! {r.json().get('chunks', 0)} chunks")
+                    data = r.json()
+                    st.success(f"Done! ({data.get('status')})")
                 else:
                     st.error(r.text)
             except:
@@ -73,8 +84,15 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
         if msg.get("sources"):
-            with st.expander("Sources"):
-                st.write(msg["sources"])
+            with st.expander("📎 Sources"):
+                for s in msg["sources"]:
+                    st.write(f"- {s}")
+        if msg.get("context"):
+            with st.expander("🔍 Retrieved Context (Debug)"):
+                chunks = msg["context"].split("\n\n---\n\n")
+                for i, chunk in enumerate(chunks, 1):
+                    st.markdown(f"**Chunk {i}:**")
+                    st.code(chunk[:500] + ("..." if len(chunk) > 500 else ""), language=None)
 
 # Chat input
 if question := st.chat_input("Ask a question..."):
@@ -88,26 +106,42 @@ if question := st.chat_input("Ask a question..."):
         with st.spinner("Thinking..."):
             try:
                 endpoint = "/query-with-sources" if show_sources else "/query"
-                r = requests.post(f"{API_URL}{endpoint}", json={"question": question})
+                payload = {
+                    "question": question,
+                    "user_level": user_level
+                }
+                r = requests.post(f"{API_URL}{endpoint}", json=payload)
                 
                 if r.ok:
                     data = r.json()
                     answer = data["answer"]
                     sources = data.get("sources", [])
+                    context = data.get("context", "")
                     
                     st.write(answer)
                     
                     if show_sources and sources:
-                        with st.expander("Sources"):
+                        with st.expander("📎 Sources"):
                             for s in sources:
                                 st.write(f"- {s}")
+                    
+                    if show_context and context:
+                        with st.expander("🔍 Retrieved Context (Debug)", expanded=False):
+                            st.markdown("**Raw chunks sent to LLM:**")
+                            # Split by separator and show each chunk
+                            chunks = context.split("\n\n---\n\n")
+                            for i, chunk in enumerate(chunks, 1):
+                                st.markdown(f"**Chunk {i}:**")
+                                st.code(chunk[:500] + ("..." if len(chunk) > 500 else ""), language=None)
                     
                     st.session_state.messages.append({
                         "role": "assistant",
                         "content": answer,
                         "sources": sources if show_sources else None,
+                        "context": context if show_context else None,
                     })
                 else:
                     st.error(f"Error: {r.text}")
             except requests.exceptions.ConnectionError:
                 st.error("❌ Cannot connect to API. Run: `python server.py`")
+

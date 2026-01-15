@@ -1,25 +1,36 @@
 # Scoped RAG
 
-A multimodal RAG (Retrieval-Augmented Generation) system that processes PDFs, images, and audio files.
+A high-performance multimodal RAG (Retrieval-Augmented Generation) system with Docling OCR support for processing PDFs, Office documents (DOCX, PPTX, XLSX), images, and audio files.
 
 ## Features
 
-- **PDF Processing** - Extract and chunk text from PDF documents
-- **Image Processing** - OCR + description using Qwen3-VL via Ollama
-- **Audio Processing** - Speech-to-text using Whisper (HuggingFace)
-- **Vector Search** - FAISS for similarity search
-- **Web UI** - Streamlit frontend with chat interface
-- **REST API** - FastAPI backend
+- **🔍 Docling OCR Engine** - High-performance document processing with table extraction
+- **📄 PDF Processing** - OCR-enabled text extraction with table structure recognition
+- **📝 Office Documents** - Full support for DOCX, PPTX, XLSX files
+- **🖼️ Image Processing** - OCR + Vision captioning using Qwen3-VL via Ollama
+- **🎵 Audio Processing** - Speech-to-text using Whisper (HuggingFace)
+- **🔎 Vector Search** - FAISS HNSW for high-speed similarity search
+- **🌐 Web UI** - Streamlit frontend with chat interface
+- **⚡ REST API** - FastAPI backend with Docling support
+
+## Supported File Formats
+
+| Category | Formats |
+|----------|---------|
+| Documents | PDF, DOCX, DOC, PPTX, PPT, XLSX, XLS |
+| Images | PNG, JPG, JPEG, TIFF, TIF, BMP, WEBP |
+| Audio | MP3, WAV, FLAC, M4A, OGG, MPEG, MP4 |
 
 ## Tech Stack
 
 | Component | Technology |
 |-----------|------------|
+| OCR Engine | Docling (with fallback support) |
 | Embeddings | Ollama (embeddinggemma) |
 | LLM | Ollama (llama3.2) |
 | Vision | Ollama (qwen3-vl) |
 | Speech-to-Text | Whisper Small EN (HuggingFace) |
-| Vector Store | FAISS |
+| Vector Store | FAISS HNSW |
 | Backend | FastAPI |
 | Frontend | Streamlit |
 
@@ -46,6 +57,9 @@ cd scoped-rag
 
 # Install dependencies
 uv sync
+
+# Install Docling OCR (optional, falls back to basic extraction)
+pip install docling docling-core python-docx python-pptx openpyxl
 ```
 
 ## Usage
@@ -67,28 +81,45 @@ Open http://localhost:8501 in your browser.
 ### Option 2: CLI
 
 ```bash
+# Basic usage
 uv run python main.py "your question here"
+
+# Force rebuild index
+uv run python main.py --rebuild "your question"
+
+# Use Docling OCR (recommended for Office docs)
+uv run python main.py --use-docling --rebuild "your question"
+```
+
+### Option 3: Test OCR Module
+
+```bash
+uv run python test_ocr.py
 ```
 
 ## Adding Documents
 
 1. Place files in the `data/` folder:
    - PDFs (`.pdf`)
-   - Images (`.png`, `.jpg`, `.jpeg`)
+   - Office docs (`.docx`, `.pptx`, `.xlsx`)
+   - Images (`.png`, `.jpg`, `.jpeg`, `.tiff`, `.bmp`, `.webp`)
    - Audio (`.mp3`, `.wav`, `.flac`, `.m4a`, `.ogg`, `.mpeg`)
 
 2. Rebuild the index:
    - **Web UI**: Click "🔄 Rebuild Index" in sidebar
-   - **CLI**: Delete `faiss_index/` folder and run again
+   - **CLI**: `uv run python main.py --rebuild --use-docling "test"`
+   - **API**: `POST /reindex?use_docling=true`
 
 ## API Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/health` | GET | Health check |
+| `/stats` | GET | File statistics |
+| `/supported-formats` | GET | List supported formats |
 | `/query` | POST | Query (answer only) |
 | `/query-with-sources` | POST | Query with sources |
-| `/reindex` | POST | Rebuild vector index |
+| `/reindex?use_docling=true` | POST | Rebuild vector index |
 | `/upload` | POST | Upload file to data folder |
 | `/files` | GET | List files in data folder |
 | `/files/{filename}` | DELETE | Delete a file |

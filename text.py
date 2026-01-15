@@ -1,10 +1,9 @@
 from pathlib import Path
 
-from langchain_classic.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFDirectoryLoader
 from langchain_core.documents import Document
-
-DATA_PATH = "data"
+from config import DATA_PATH
 
 
 def load_pdfs(data_path: str = DATA_PATH) -> list[Document]:
