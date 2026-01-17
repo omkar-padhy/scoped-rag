@@ -1,0 +1,7 @@
+username,password,role,level,display_name
+admin,admin123,admin,5,Administrator
+user_l5,pass5@secure,L5,5,Top Secret User
+user_l4,pass4@secure,L4,4,Sensitive User
+user_l3,pass3@secure,L3,3,Confidential User
+user_l2,pass2@secure,L2,2,Internal User
+user_l1,pass1@secure,L1,1,Public User

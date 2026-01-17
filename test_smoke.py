@@ -299,7 +299,7 @@ def check_llm_invocation() -> CheckResult:
     try:
         from llm import get_llm
         
-        llm = get_llm()
+        llm, model_name = get_llm()
         response = llm.invoke("Say 'test ok' in exactly 2 words")
         
         # Handle both string and AIMessage responses
@@ -308,7 +308,7 @@ def check_llm_invocation() -> CheckResult:
         else:
             answer = str(response)
         
-        detail = f"LLM responded | preview='{answer[:50]}...'" if len(answer) > 50 else f"LLM responded | answer='{answer}'"
+        detail = f"model={model_name} | preview='{answer[:50]}...'" if len(answer) > 50 else f"model={model_name} | answer='{answer}'"
         return True, detail
     except Exception as exc:
         return False, f"{type(exc).__name__}: {exc}"

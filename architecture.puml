@@ -1,0 +1,123 @@
+@startuml RAG_Architecture
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam defaultTextAlignment center
+skinparam nodesep 20
+skinparam ranksep 30
+
+title **Scoped RAG - High-Level Architecture**
+
+top to bottom direction
+
+' ============ USER LAYER ============
+rectangle "**User Interface**" as UI #E3F2FD {
+    rectangle "Streamlit Frontend" as Frontend {
+        (Chat Interface) as C1
+        (Source Viewer) as C2
+        (Confidence Display) as C3
+    }
+}
+
+' ============ API LAYER ============
+rectangle "**API Layer**" as API #E8F5E9 {
+    rectangle "FastAPI Server" as Server {
+        (/query endpoint) as A1
+        (/health endpoint) as A2
+        (Response Validator) as A3
+    }
+}
+
+' ============ RETRIEVAL LAYER ============
+rectangle "**Retrieval Pipeline**" as Retrieval #FFF3E0 {
+    rectangle "Query Classifier" as QC {
+        (contact) as Q1
+        (eligibility) as Q2
+        (process) as Q3
+        (amount) as Q4
+        (date) as Q5
+        (definition) as Q6
+    }
+    
+    rectangle "Hybrid Search" as Hybrid {
+        (Vector Search MMR) as H1
+        (BM25 Keyword) as H2
+        (Sibling Chunk Fetch) as H3
+        (Contact Block Fetch) as H4
+    }
+    
+    rectangle "Multi-Signal Reranker" as Rerank {
+        (Lexical Score) as R1
+        (Structure Score) as R2
+        (Evidence Score) as R3
+        (Gemini Semantic) as R4
+    }
+}
+
+' ============ STORAGE LAYER ============
+rectangle "**Storage**" as Storage #F3E5F5 {
+    rectangle "ChromaDB" as Chroma {
+        (4087 Chunks) as S1
+        (18 Contact Blocks) as S2
+        (Metadata Index) as S3
+    }
+    
+    rectangle "BM25 Index" as BM25 {
+        (Tokenized Corpus) as B1
+        (Term Frequencies) as B2
+    }
+}
+
+' ============ LLM LAYER ============
+rectangle "**LLM Layer**" as LLM #FFEBEE {
+    rectangle "Groq API" as Groq {
+        (llama-3.3-70b) as L1
+        (llama-3.1-8b) as L2
+        (llama-4-scout-17b) as L3
+    }
+    
+    rectangle "Ollama Fallback" as Ollama {
+        (llama3.2:3b) as L4
+    }
+    
+    rectangle "Gemini API" as GeminiAPI {
+        (gemini-2.0-flash) as L5
+    }
+}
+
+' ============ INGESTION LAYER ============
+rectangle "**Document Ingestion**" as Ingest #ECEFF1 {
+    rectangle "Docling OCR" as OCR {
+        (PDF Parser) as I1
+        (Table Detector) as I2
+        (Image OCR) as I3
+    }
+    
+    rectangle "Smart Chunker" as Chunker {
+        (Table-Aware Split) as I4
+        (Contact Extract) as I5
+        (Semantic Boundaries) as I6
+    }
+    
+    rectangle "Embeddings" as Embed {
+        (mxbai-embed-large) as I7
+        (1024 dimensions) as I8
+    }
+}
+
+' ============ DATA SOURCES ============
+rectangle "**Data Sources**" as Data #FFF9C4 {
+    (PDF Documents) as D1
+    (DOCX Files) as D2
+    (PPTX Slides) as D3
+    (XLSX Sheets) as D4
+}
+
+' ============ VERTICAL FLOW ============
+UI -down-> API
+API -down-> Retrieval
+Retrieval -down-> Storage
+Storage -down-> LLM
+Data -down-> Ingest
+Ingest -down-> Storage
+
+@enduml

@@ -12,12 +12,12 @@ DB_PATH = Path("chroma_db")
 # ===================
 # LLM Models (Groq API with cascading fallback)
 # ===================
-# 1. Best Quality: 70B params - smartest reasoning
+# 1. Primary: 70B versatile - best quality for extraction
 LLM_MODEL_PRIMARY = "llama-3.3-70b-versatile"
-# 2. Long Duration: 30K tokens/min, 500K tokens/day
-LLM_MODEL_SECONDARY = "meta-llama/llama-4-scout-17b-16e-instruct"
-# 3. OK Fallback: 14.4K requests/day - most reliable
-LLM_MODEL_TERTIARY = "llama-3.1-8b-instant"
+# 2. Secondary: 8B instant - fast and reliable
+LLM_MODEL_SECONDARY = "llama-3.1-8b-instant"
+# 3. Tertiary: Scout 17B - experimental
+LLM_MODEL_TERTIARY = "meta-llama/llama-4-scout-17b-16e-instruct"
 # 4. Local: Always available offline
 LLM_MODEL_LOCAL = "llama3.2:3b-instruct-q4_K_M"
 

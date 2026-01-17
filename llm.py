@@ -8,6 +8,13 @@ Uses Groq API with automatic fallback on rate limits.
 import os
 import logging
 
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # dotenv not installed, rely on system env vars
+
 logger = logging.getLogger(__name__)
 
 # Check for Groq API key
@@ -26,8 +33,8 @@ def _try_groq_llm(model_name: str):
         llm = ChatGroq(
             model=model_name,
             api_key=GROQ_API_KEY,
-            temperature=0.1,
-            max_tokens=2048,
+            temperature=0,  # Zero temperature for deterministic, focused responses
+            max_tokens=384,  # Strict limit to prevent hallucination
         )
         logger.info(f"✅ Groq LLM ready: {model_name}")
         return llm
@@ -44,7 +51,7 @@ def _get_ollama_llm(model_name: str):
     from langchain_ollama import OllamaLLM
     
     logger.info(f"🏠 Using local Ollama: {model_name}")
-    return OllamaLLM(model=model_name)
+    return OllamaLLM(model=model_name, temperature=0, num_predict=384)
 
 
 def get_llm():
@@ -54,6 +61,8 @@ def get_llm():
     2. Secondary: llama-4-scout-17b (Groq) - long duration
     3. Tertiary: llama-3.1-8b-instant (Groq) - reliable backup
     4. Fallback: Local Ollama - always available
+    
+    Returns: tuple (llm, model_name)
     """
     from config import (
         LLM_MODEL_PRIMARY, 
@@ -65,20 +74,20 @@ def get_llm():
     # Try Primary (70B - best quality)
     llm = _try_groq_llm(LLM_MODEL_PRIMARY)
     if llm:
-        return llm
+        return llm, LLM_MODEL_PRIMARY
     
     # Try Secondary (17B - long duration)
     llm = _try_groq_llm(LLM_MODEL_SECONDARY)
     if llm:
-        return llm
+        return llm, LLM_MODEL_SECONDARY
     
     # Try Tertiary (8B - reliable)
     llm = _try_groq_llm(LLM_MODEL_TERTIARY)
     if llm:
-        return llm
+        return llm, LLM_MODEL_TERTIARY
     
     # Fallback to local Ollama
-    return _get_ollama_llm(LLM_MODEL_LOCAL)
+    return _get_ollama_llm(LLM_MODEL_LOCAL), LLM_MODEL_LOCAL
 
 
 def query_with_fallback(prompt: str) -> str:

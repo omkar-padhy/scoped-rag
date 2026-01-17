@@ -773,6 +773,15 @@ class RAGDocumentProcessor:
             r"^(Chapter|Section|Part)\s+\d+",  # Chapter X, Section Y
             r"^#{1,3}\s+.+$",              # Markdown headers
         ]
+        
+        # Patterns to detect contact blocks
+        self.contact_patterns = [
+            r'(?:Dr\.|Mr\.|Ms\.|Sh\.|Smt\.)\s*[\w\s]+',  # Names with titles
+            r'\d{3}[-.\s]?\d{4,8}',  # Phone numbers
+            r'[\w\.]+\[(?:at|dot)\][\w\.]+',  # Obfuscated emails
+            r'[\w\.\-]+@[\w\.\-]+',  # Regular emails
+            r'(?:Room|Block|Floor)\s*(?:No\.?)?\s*[\d\-]+',  # Office locations
+        ]
     
     def _detect_heading(self, line: str) -> bool:
         """Check if a line looks like a heading"""
@@ -783,6 +792,82 @@ class RAGDocumentProcessor:
             if re.match(pattern, line):
                 return True
         return False
+    
+    def _detect_contact_block(self, text: str) -> list[tuple[int, int, str]]:
+        """
+        Detect contact information blocks in text.
+        Returns list of (start_idx, end_idx, block_content) tuples.
+        """
+        blocks = []
+        lines = text.split('\n')
+        
+        i = 0
+        while i < len(lines):
+            line = lines[i].strip()
+            
+            # Check if line starts a contact entry (numbered person or title)
+            if re.match(r'^\d+\.\s*(?:Dr\.|Mr\.|Ms\.|Sh\.|Smt\.)', line) or \
+               re.match(r'^(?:Dr\.|Mr\.|Ms\.|Sh\.|Smt\.)\s+\w', line):
+                
+                # Found start of contact block, collect until next numbered entry or end
+                block_start = sum(len(l) + 1 for l in lines[:i])
+                block_lines = [lines[i]]
+                j = i + 1
+                
+                # Collect all lines until next contact entry or empty section
+                while j < len(lines):
+                    next_line = lines[j].strip()
+                    # Stop at next numbered person entry
+                    if re.match(r'^\d+\.\s*(?:Dr\.|Mr\.|Ms\.|Sh\.|Smt\.)', next_line):
+                        break
+                    # Stop at major section changes
+                    if next_line and self._detect_heading(next_line):
+                        break
+                    block_lines.append(lines[j])
+                    j += 1
+                
+                block_content = '\n'.join(block_lines)
+                block_end = block_start + len(block_content)
+                
+                # Only count as contact block if it has actual contact data
+                has_phone = bool(re.search(r'\d{3}[-.\s]?\d{4,8}', block_content))
+                has_email = bool(re.search(r'[\w\.]+(?:\[at\]|@)[\w\.]+', block_content))
+                
+                if has_phone or has_email:
+                    blocks.append((block_start, block_end, block_content))
+                
+                i = j
+            else:
+                i += 1
+        
+        return blocks
+    
+    def _extract_contact_blocks(self, text: str) -> tuple[str, list[str]]:
+        """
+        Extract contact blocks from text, returning:
+        - text_without_contacts: Original text with contact blocks replaced by markers
+        - contact_blocks: List of contact block strings to be chunked separately
+        """
+        contact_blocks = []
+        blocks = self._detect_contact_block(text)
+        
+        if not blocks:
+            return text, []
+        
+        # Sort blocks by position (reverse to replace from end)
+        blocks.sort(key=lambda x: x[0], reverse=True)
+        
+        text_modified = text
+        for start, end, block in blocks:
+            contact_blocks.append(block)
+            # Replace with marker that will be split on
+            marker = f"\n\n[CONTACT_BLOCK_{len(contact_blocks)}]\n\n"
+            text_modified = text_modified[:start] + marker + text_modified[end:]
+        
+        # Reverse to maintain original order
+        contact_blocks.reverse()
+        
+        return text_modified, contact_blocks
     
     def _create_chunk_id(self, file_name: str, chunk_index: int, page: int = 0) -> str:
         """Create unique chunk ID"""
@@ -870,39 +955,70 @@ class RAGDocumentProcessor:
                     current_heading = line.strip()[:80]  # Cap heading length
                 text_with_heading_context.append((line, current_heading))
             
-            # Reconstruct text (we'll track heading per chunk later)
-            text_doc = Document(
-                page_content=content.text_content,
-                metadata=base_metadata.copy()
-            )
+            # === Table-Aware Chunking: Extract contact blocks first ===
+            text_for_chunking, contact_blocks = self._extract_contact_blocks(content.text_content)
             
-            chunks = self.text_splitter.split_documents([text_doc])
+            # Process contact blocks as separate chunks (keep together)
+            contact_chunk_idx = 0
+            for block in contact_blocks:
+                if len(block.strip()) > 50:  # Only if meaningful content
+                    contact_meta = base_metadata.copy()
+                    contact_meta["content_type"] = "contact"
+                    contact_meta["heading_context"] = "Contact Information"
+                    contact_meta["chunk_id"] = self._create_chunk_id(
+                        content.file_name, contact_chunk_idx, page=99  # Special page for contacts
+                    )
+                    contact_meta["chunk_index"] = contact_chunk_idx
+                    contact_meta["is_contact_block"] = True
+                    
+                    contact_doc = Document(
+                        page_content=self._add_semantic_header(block, contact_meta),
+                        metadata=contact_meta
+                    )
+                    documents.append(contact_doc)
+                    contact_chunk_idx += 1
+                    logger.debug(f"Created contact block chunk: {block[:100]}...")
             
-            for i, chunk in enumerate(chunks):
-                # Try to find the heading context for this chunk
-                chunk_start = chunk.page_content[:100]
-                heading_for_chunk = "General"
-                
-                for line, heading in text_with_heading_context:
-                    if line.strip() and line.strip() in chunk_start:
-                        heading_for_chunk = heading
-                        break
-                
-                chunk.metadata["chunk_id"] = self._create_chunk_id(
-                    content.file_name, i
-                )
-                chunk.metadata["chunk_index"] = i
-                chunk.metadata["total_chunks"] = len(chunks)
-                chunk.metadata["heading_context"] = heading_for_chunk
-                chunk.metadata["content_type"] = "text"
-                
-                # Add semantic header with context
-                chunk.page_content = self._add_semantic_header(
-                    chunk.page_content,
-                    chunk.metadata
+            # Now chunk the remaining text (with contact blocks removed)
+            # Remove the [CONTACT_BLOCK_X] markers
+            text_for_chunking = re.sub(r'\[CONTACT_BLOCK_\d+\]', '', text_for_chunking)
+            
+            if text_for_chunking.strip():
+                text_doc = Document(
+                    page_content=text_for_chunking,
+                    metadata=base_metadata.copy()
                 )
                 
-                documents.append(chunk)
+                chunks = self.text_splitter.split_documents([text_doc])
+                
+                # Offset chunk indices by number of contact blocks
+                chunk_offset = len(contact_blocks)
+                
+                for i, chunk in enumerate(chunks):
+                    # Try to find the heading context for this chunk
+                    chunk_start = chunk.page_content[:100]
+                    heading_for_chunk = "General"
+                    
+                    for line, heading in text_with_heading_context:
+                        if line.strip() and line.strip() in chunk_start:
+                            heading_for_chunk = heading
+                            break
+                    
+                    chunk.metadata["chunk_id"] = self._create_chunk_id(
+                        content.file_name, i + chunk_offset
+                    )
+                    chunk.metadata["chunk_index"] = i + chunk_offset
+                    chunk.metadata["total_chunks"] = len(chunks) + len(contact_blocks)
+                    chunk.metadata["heading_context"] = heading_for_chunk
+                    chunk.metadata["content_type"] = "text"
+                    
+                    # Add semantic header with context
+                    chunk.page_content = self._add_semantic_header(
+                        chunk.page_content,
+                        chunk.metadata
+                    )
+                    
+                    documents.append(chunk)
         
         # Process tables as separate documents
         for table in content.tables:

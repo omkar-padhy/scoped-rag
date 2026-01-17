@@ -1,10 +1,14 @@
 """FastAPI backend for RAG system with Docling OCR support"""
 
+import asyncio
 import os
 import json
 import hashlib
 import shutil
+from contextlib import asynccontextmanager
+from functools import lru_cache
 from pathlib import Path
+from typing import Optional
 
 from fastapi import FastAPI, File, HTTPException, Query as QueryParam, UploadFile
 from pydantic import BaseModel
@@ -17,6 +21,7 @@ from ocr import (
     process_images_with_ocr_and_caption,
     get_file_stats,
     get_supported_extensions,
+    extract_file_metadata,
 )
 from vector_store import (
     create_vector_store,
@@ -31,20 +36,24 @@ from vector_store import (
 MANIFEST_PATH = Path(DB_PATH) / "manifest.json"
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".flac", ".m4a", ".ogg", ".mpeg", ".mp4"}
 
-app = FastAPI(
-    title="Scoped RAG API",
-    description="RAG API with Docling OCR support for PDF, DOCX, PPTX, XLSX, and Images",
-    version="2.0.0",
-)
-
 # Global store and settings
 store = None
 USE_DOCLING = os.environ.get("USE_DOCLING", "true").lower() == "true"
+
+# Cache for file metadata (cleared on file changes)
+_file_metadata_cache: dict[str, dict] = {}
+_cache_valid: bool = False
+
+
+class ChatMessage(BaseModel):
+    role: str  # "user" or "assistant"
+    content: str
 
 
 class Query(BaseModel):
     question: str
     user_level: int = 5
+    chat_history: list[ChatMessage] = []  # Optional chat history for context
 
 
 class QueryResponse(BaseModel):
@@ -55,6 +64,7 @@ class QueryWithSourcesResponse(BaseModel):
     answer: str
     sources: list[str]
     context: str
+    model: str = "unknown"
 
 
 class ReindexRequest(BaseModel):
@@ -64,6 +74,19 @@ class ReindexRequest(BaseModel):
 class FileStats(BaseModel):
     total: int
     by_type: dict
+
+
+class FileInfo(BaseModel):
+    name: str
+    level: int
+    keywords: str
+
+
+class FilesResponse(BaseModel):
+    files: list[str]
+    files_with_levels: list[FileInfo]
+    total_count: int
+    accessible_count: int
 
 
 # ---------------------------------------------------------------------------
@@ -190,24 +213,41 @@ def get_store():
     return sync_index()
 
 
-import asyncio
-
-@app.on_event("startup")
-async def startup():
-    """Load vector store on startup and start auto-sync"""
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan: startup and shutdown events"""
+    # Startup
     get_store()
-    asyncio.create_task(watch_for_changes())
+    task = asyncio.create_task(watch_for_changes())
+    yield
+    # Shutdown
+    task.cancel()
+
 
 async def watch_for_changes():
-    """Background task to sync index every 5 seconds"""
+    """Background task to sync index every 30 seconds"""
+    global _cache_valid
     print("Started background file watcher...")
     while True:
         try:
-            await asyncio.sleep(5)
-            # Run sync in thread to avoid blocking main loop
+            await asyncio.sleep(30)  # Check every 30 seconds instead of 5
+            _cache_valid = False  # Invalidate cache
             await asyncio.to_thread(sync_index)
+        except asyncio.CancelledError:
+            break
         except Exception as e:
             print(f"Error in background sync: {e}")
+
+
+# ---------------------------------------------------------------------------
+# FastAPI Application
+# ---------------------------------------------------------------------------
+app = FastAPI(
+    title="Scoped RAG API",
+    description="RAG API with Docling OCR support for PDF, DOCX, PPTX, XLSX, and Images",
+    version="2.0.0",
+    lifespan=lifespan,
+)
 
 
 @app.get("/health")
@@ -242,14 +282,23 @@ def query(q: Query):
 
 @app.post("/query-with-sources", response_model=QueryWithSourcesResponse)
 def query_sources(q: Query):
-    """Query with source documents and access level control"""
+    """Query with source documents, access level control, and chat context"""
     try:
         s = get_store()
-        result = query_with_sources(s, q.question, user_level=q.user_level)
+        # Convert Pydantic models to dicts for the function
+        chat_history = [{"role": m.role, "content": m.content} for m in q.chat_history] if q.chat_history else []
+        
+        result = query_with_sources(
+            s, 
+            q.question, 
+            user_level=q.user_level,
+            chat_history=chat_history
+        )
         return QueryWithSourcesResponse(
             answer=result["answer"],
             sources=result["sources"],
             context=result["context"],
+            model=result.get("model", "unknown"),
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -273,6 +322,7 @@ def reindex(use_docling: bool = QueryParam(default=True)):
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
     """Upload a file to the data folder"""
+    global _cache_valid
     try:
         # Get all supported extensions from OCR module
         allowed_ext = set(get_supported_extensions()) | AUDIO_EXTENSIONS
@@ -287,7 +337,8 @@ async def upload_file(file: UploadFile = File(...)):
 
         with open(file_path, "wb") as f:
             shutil.copyfileobj(file.file, f)
-
+        
+        _cache_valid = False  # Invalidate cache
         return {"status": "uploaded", "filename": file.filename}
     except HTTPException:
         raise
@@ -295,14 +346,38 @@ async def upload_file(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/files")
-def list_files():
-    """List files in data folder"""
+@app.get("/files", response_model=FilesResponse)
+def list_files(user_level: int = QueryParam(default=5, ge=1, le=5)):
+    """List files in data folder filtered by user access level"""
+    global _file_metadata_cache, _cache_valid
+    
     try:
         if not DATA_PATH.exists():
-            return {"files": []}
-        files = [f.name for f in DATA_PATH.iterdir() if f.is_file()]
-        return {"files": files}
+            return FilesResponse(files=[], files_with_levels=[], total_count=0, accessible_count=0)
+        
+        # Rebuild cache if invalid
+        if not _cache_valid:
+            _file_metadata_cache.clear()
+            for f in DATA_PATH.iterdir():
+                if f.is_file():
+                    metadata = extract_file_metadata(f)
+                    _file_metadata_cache[f.name] = {
+                        "name": f.name,
+                        "level": metadata.get("access_level", 2),
+                        "keywords": metadata.get("keywords", "")
+                    }
+            _cache_valid = True
+        
+        # Build response from cache
+        all_files = list(_file_metadata_cache.values())
+        filtered_files = [f for f in all_files if f["level"] <= user_level]
+        
+        return FilesResponse(
+            files=[f["name"] for f in filtered_files],
+            files_with_levels=[FileInfo(**f) for f in filtered_files],
+            total_count=len(all_files),
+            accessible_count=len(filtered_files)
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -310,11 +385,13 @@ def list_files():
 @app.delete("/files/{filename}")
 def delete_file(filename: str):
     """Delete a file from data folder"""
+    global _cache_valid
     try:
         file_path = DATA_PATH / filename
         if not file_path.exists():
             raise HTTPException(404, "File not found")
         file_path.unlink()
+        _cache_valid = False  # Invalidate cache
         return {"status": "deleted", "filename": filename}
     except HTTPException:
         raise

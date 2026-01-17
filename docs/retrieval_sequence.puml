@@ -1,0 +1,69 @@
+@startuml Scoped RAG Retrieval
+skinparam backgroundColor #ffffff
+skinparam defaultFontName Arial
+skinparam defaultFontStyle bold
+
+skinparam participant {
+    FontColor #ffffff
+    FontStyle bold
+    RoundCorner 10
+}
+
+skinparam actor {
+    BackgroundColor #6366f1
+    BorderColor #4f46e5
+}
+
+skinparam database {
+    BackgroundColor #1e40af
+    BorderColor #1e3a8a
+    FontColor #ffffff
+    FontStyle bold
+}
+
+skinparam sequence {
+    ArrowColor #1e293b
+    ArrowFontColor #334155
+    ArrowFontStyle bold
+    ArrowThickness 2
+    LifeLineBorderColor #000000
+    LifeLineBackgroundColor #333333
+}
+
+skinparam title {
+    FontColor #1e293b
+    FontSize 20
+    FontStyle bold
+}
+
+title **Scoped RAG - Retrieval Process**
+
+actor User as user #6366f1
+participant "Frontend" as frontend #10b981
+participant "Backend" as server #8b5cf6
+participant "QueryProcessor" as processor #3b82f6
+participant "Vector Store" as chroma #f97316
+participant "BM25" as bm25 #14b8a6
+participant "Reranker" as reranker #ef4444
+participant "LLM" as llm #eab308
+
+user -> frontend : <b>Question</b>
+frontend -> server : <b>POST /query-with-sources</b>
+server -> processor : <b>query_with_sources()</b>
+processor -> processor : <b>Classify Query</b>
+processor -> chroma : <b>Vector Search (MMR)</b>
+chroma --> processor : <b>Semantic Matches</b>
+processor -> bm25 : <b>Keyword Search</b>
+bm25 --> processor : <b>Keyword Matches</b>
+processor -> chroma : <b>Fetch Sibling Chunks</b>
+chroma --> processor : <b>Context Chunks</b>
+processor -> reranker : <b>Rerank</b>
+reranker --> processor : <b>Top K Docs</b>
+processor -> llm : <b>Generate Answer</b>
+llm --> processor : <b>Response</b>
+processor -> processor : <b>Validate & Clean</b>
+processor --> server : <b>Response + Sources</b>
+server --> frontend : <b>JSON</b>
+frontend --> user : <b>Display Answer</b>
+
+@enduml

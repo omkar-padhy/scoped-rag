@@ -1,0 +1,61 @@
+{
+  "chats": {
+    "ed32a064": {
+      "id": "ed32a064",
+      "title": "tell me about the ted talk",
+      "created_at": "2026-01-16T17:49:33.130111",
+      "updated_at": "2026-01-17T11:25:46.695699",
+      "messages": [
+        {
+          "role": "user",
+          "content": "tell me about the ted talk",
+          "timestamp": "2026-01-17T11:24:46.783434"
+        },
+        {
+          "role": "user",
+          "content": "tell me about the ted talk",
+          "timestamp": "2026-01-17T11:25:20.926483"
+        },
+        {
+          "role": "assistant",
+          "content": "The provided documents do not mention a TED talk. The documents appear to be transcripts of a speaker discussing marketing, AI, and innovation. \n\nHere are some key points mentioned in the documents:\n* The speaker discusses the impact of generative AI on marketing and innovation.\n* A Harvard study conducted with the Boston Consulting Group found that over-reliance on generative AI can lead to a 40% drop in collective divergence of ideas.\n* The speaker emphasizes the importance of identifying and reskilling \"true artists\" and \"true innovators\" in marketing to use AI effectively.\n* The documents also mention the evolution of marketing from a right-brained creative function to a more specialized field with the use of digital marketing, analytics, and AI.\n\nSince the documents do not mention a TED talk, the answer to the question \"tell me about the TED talk\" is:\nNot found in the provided documents",
+          "timestamp": "2026-01-17T11:25:46.695682",
+          "sources": [
+            "ted-talk_[L2].mp3:636.9:11",
+            "ted-talk_[L2].mp3:521.5:9",
+            "ted-talk_[L2].mp3:357.3:6",
+            "ted-talk_[L2].mp3:124.9:2",
+            "ted-talk_[L2].mp3:5.1:0",
+            "Biotechnology Career Advancement and Re-orientation (BioCARe) Programmes _ Department of Biotechnology_[L2].pdf:p0:c17"
+          ],
+          "model": "llama-3.3-70b-versatile"
+        }
+      ],
+      "context": {
+        "model_used": "llama-3.3-70b-versatile",
+        "total_queries": 1,
+        "sources_used": [
+          "ted-talk_[L2].mp3:636.9:11",
+          "ted-talk_[L2].mp3:521.5:9",
+          "ted-talk_[L2].mp3:357.3:6",
+          "ted-talk_[L2].mp3:124.9:2",
+          "ted-talk_[L2].mp3:5.1:0",
+          "Biotechnology Career Advancement and Re-orientation (BioCARe) Programmes _ Department of Biotechnology_[L2].pdf:p0:c17"
+        ]
+      }
+    },
+    "540eaf71": {
+      "id": "540eaf71",
+      "title": "Chat 2",
+      "created_at": "2026-01-17T11:32:02.411027",
+      "updated_at": "2026-01-17T11:32:02.411027",
+      "messages": [],
+      "context": {
+        "model_used": null,
+        "total_queries": 0,
+        "sources_used": []
+      }
+    }
+  },
+  "active_chat_id": "540eaf71"
+}

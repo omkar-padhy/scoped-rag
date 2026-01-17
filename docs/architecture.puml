@@ -1,0 +1,107 @@
+@startuml Scoped RAG Architecture
+skinparam backgroundColor #ffffff
+skinparam defaultFontName Arial
+skinparam defaultFontStyle bold
+
+skinparam rectangle {
+    RoundCorner 15
+    FontColor #ffffff
+    FontStyle bold
+}
+
+skinparam database {
+    BackgroundColor #1e5cb3
+    BorderColor #1a4d99
+    FontColor #ffffff
+    FontStyle bold
+}
+
+skinparam arrow {
+    Color #1e5cb3
+    Thickness 2
+}
+
+title **Scoped RAG - Methodology & Implementation**
+
+' ============ TOP SECTION - USER ACCESS ============
+rectangle "User Login" as login #3b82f6
+
+rectangle "Admin" as admin #10b981
+rectangle "Staff" as staff #10b981
+
+login --> admin
+login --> staff
+
+' ============ USER INPUT SECTION ============
+rectangle "User Input" as input #3b82f6
+
+admin --> input
+staff --> input
+
+' ============ QUERY PROCESSING ============
+rectangle "Query\nClassification" as qclass #a855f7
+
+input --> qclass
+
+' ============ HYBRID RETRIEVAL ============
+rectangle "BM25\n(Keyword Search)" as bm25 #06b6d4
+rectangle "Vector Search\n(Semantic)" as vecsearch #06b6d4
+database "Vector Store\n(ChromaDB)" as vs1
+
+qclass --> bm25
+qclass --> vecsearch
+bm25 <--> vs1
+vecsearch <--> vs1
+
+rectangle "Reranking\n(Multi-Signal)" as rerank #ec4899
+
+bm25 --> rerank
+vecsearch --> rerank
+
+rectangle "LLM" as llm #f97316
+
+rerank --> llm
+
+' ============ FILE UPLOAD SECTION ============
+rectangle "Upload Files" as upload #3b82f6
+
+input --> upload
+
+' ============ FILE TYPES ============
+rectangle "Documents" as docs #8b5cf6
+rectangle "Images" as images #8b5cf6
+rectangle "Audio" as audio #8b5cf6
+
+upload --> docs
+upload --> images
+upload --> audio
+
+' ============ PROCESSING MODELS ============
+rectangle "OCR" as ocr #14b8a6
+rectangle "Vision Language\nModel" as vlm #14b8a6
+rectangle "Audio Transcribe\nModel" as atm #14b8a6
+
+docs --> ocr
+images --> vlm
+audio --> atm
+
+' ============ TEXT PROCESSING PIPELINE ============
+rectangle "Splitting" as split #3b82f6
+rectangle "Chunking" as chunk #3b82f6
+rectangle "ID Creation &\nTagging" as tagging #3b82f6
+rectangle "Text Embedding\nModel" as embed #ef4444
+
+ocr --> split
+vlm --> split
+atm --> split
+
+split --> chunk
+chunk --> tagging
+tagging --> embed
+
+' ============ STORAGE ============
+database "Vector Store\n(ChromaDB)" as vs2
+
+embed --> vs2
+
+@enduml
